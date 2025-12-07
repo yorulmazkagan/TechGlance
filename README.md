@@ -64,7 +64,7 @@ To build and run this project locally, you need the Flutter SDK and an Android e
 
 1.  **Clone the Repository**
     ```bash
-    git clone [https://github.com/YOUR_USERNAME/TechGlance.git](https://github.com/YOUR_USERNAME/TechGlance.git)
+    git clone https://github.com/yorulmazkagan/TechGlance.git
     cd TechGlance/mobile
     ```
 
