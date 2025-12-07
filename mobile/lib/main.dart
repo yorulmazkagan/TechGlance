@@ -5,11 +5,11 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:home_widget/home_widget.dart';
 import 'dart:async';
 import 'dart:convert';
 
 void main() {
-  // Removed dotenv initialization since we use user input now
   runApp(const TechGlanceApp());
 }
 
@@ -21,7 +21,6 @@ class TechGlanceApp extends StatefulWidget {
 }
 
 class _TechGlanceAppState extends State<TechGlanceApp> {
-  // UniqueKey forces the app to rebuild when language settings change
   Key _uniqueKey = UniqueKey();
 
   void restartApp() {
@@ -36,7 +35,6 @@ class _TechGlanceAppState extends State<TechGlanceApp> {
       key: _uniqueKey,
       debugShowCheckedModeBanner: false,
       title: 'TechGlance',
-      // Engineer-focused Dark Theme
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: Colors.black,
         cardColor: const Color(0xFF1E1E1E),
@@ -69,19 +67,16 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
   String _statusMessage = "Initializing...";
   Timer? _refreshTimer;
 
-  // --- User Preferences ---
   String _userApiKey = "";
   int _articleCount = 5;
-  String _selectedLanguage = "tr"; // Default language
+  String _selectedLanguage = "tr";
   
-  // Default Engineering Sources
   List<String> _rssUrls = [
     "https://news.ycombinator.com/rss",
     "https://github.blog/category/engineering/feed/",
     "http://export.arxiv.org/rss/cs.AI",
   ];
 
-  // --- Localization Map ---
   final Map<String, Map<String, String>> _localizedStrings = {
     'tr': {
       'title': 'TechGlance',
@@ -96,7 +91,7 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
       'noNews': 'Haber yok veya Ayar yapılmadı.',
       'openSettings': 'Ayarları Aç',
       'scanning': 'Taranıyor:',
-      'aiError': 'AI Hatası',
+      'aiError': 'Özetlenemedi (Orijinal Metin)',
       'generalError': 'Hata:',
       'missingKey': 'API Anahtarı Eksik!',
       'promptLang': 'TURKISH',
@@ -116,7 +111,7 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
       'noNews': 'No news or settings missing.',
       'openSettings': 'Open Settings',
       'scanning': 'Scanning:',
-      'aiError': 'AI Error',
+      'aiError': 'Summarization Failed (Original Text)',
       'generalError': 'Error:',
       'missingKey': 'API Key Missing!',
       'promptLang': 'ENGLISH',
@@ -132,9 +127,8 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
     super.initState();
     _loadSettingsAndStart();
 
-    // Background refresh every 12 hours
     _refreshTimer = Timer.periodic(const Duration(hours: 12), (Timer t) {
-      debugPrint("⏰ [AUTO-REFRESH] 12 hours passed, fetching new data...");
+      debugPrint("⏰ [AUTO-REFRESH] 12 hours passed...");
       _fetchAndProcessNews();
     });
   }
@@ -145,7 +139,6 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
     super.dispose();
   }
 
-  // --- Persistence & Settings ---
   Future<void> _loadSettingsAndStart() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
@@ -161,7 +154,6 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
       }
     });
 
-    // Attempt to load cached data first for instant UX
     await _loadCachedNews();
 
     if (_userApiKey.isEmpty) {
@@ -171,30 +163,19 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
     }
   }
 
-  // Check cache validity (expires after 24h)
   Future<void> _loadCachedNews() async {
     final prefs = await SharedPreferences.getInstance();
-    
     final int? lastSavedTime = prefs.getInt('news_timestamp');
+    
     if (lastSavedTime != null) {
-      final savedDate = DateTime.fromMillisecondsSinceEpoch(lastSavedTime);
-      final diff = DateTime.now().difference(savedDate);
-      
+      final diff = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(lastSavedTime));
       if (diff.inHours >= 24) {
-        debugPrint("🧹 [CACHE] Data expired (>24h). Clearing cache.");
-        await prefs.remove('flutter.cached_news'); 
         await prefs.remove('cached_news');
         await prefs.remove('news_timestamp');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(t('cacheCleared')), backgroundColor: Colors.orange),
-          );
-        }
         return;
       }
     }
 
-    // Deserialize JSON
     final String? jsonString = prefs.getString('cached_news');
     if (jsonString != null) {
       try {
@@ -203,28 +184,29 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
           return Map<String, String>.from(item);
         }).toList();
 
-        if (mounted) {
-          setState(() {
-            _newsList = cachedList;
-          });
-          debugPrint("📂 [CACHE] Loaded ${cachedList.length} items from local storage.");
-        }
+        if (mounted) setState(() => _newsList = cachedList);
       } catch (e) {
-        debugPrint("❌ [CACHE] Corrupted data: $e");
+        debugPrint("❌ [CACHE] Error: $e");
       }
     }
   }
 
-  // Save to SharedPreferences (Consumed by Android Widget)
   Future<void> _saveNewsToCache(List<Map<String, String>> news) async {
     final prefs = await SharedPreferences.getInstance();
     final String jsonString = jsonEncode(news);
     
-    // 'cached_news' key is prefixed with 'flutter.' by the plugin automatically.
-    // The native Kotlin widget code reads from 'flutter.cached_news'.
     await prefs.setString('cached_news', jsonString);
     await prefs.setInt('news_timestamp', DateTime.now().millisecondsSinceEpoch);
-    debugPrint("💾 [CACHE] Saved ${news.length} items to storage.");
+    
+    try {
+      await HomeWidget.updateWidget(
+        name: 'NewsWidgetProvider',
+        androidName: 'NewsWidgetProvider',
+      );
+      debugPrint("📲 [WIDGET] Widget update signal sent.");
+    } catch (e) {
+      debugPrint("❌ [WIDGET] Update failed: $e");
+    }
   }
 
   Future<void> _saveSettings() async {
@@ -243,13 +225,8 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
       if (_newsList.isEmpty) setState(() => _statusMessage = t('missingKey'));
       return;
     }
-
-    try {
-      _model = GenerativeModel(model: 'gemini-flash-latest', apiKey: _userApiKey);
-      _fetchAndProcessNews();
-    } catch (e) {
-      setState(() => _statusMessage = "${t('generalError')} Key?");
-    }
+    _model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: _userApiKey);
+    _fetchAndProcessNews();
   }
 
   Future<void> _fetchAndProcessNews() async {
@@ -271,14 +248,22 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
             
             if (rssFeed.items != null) {
               for (var item in rssFeed.items!.take(_articleCount)) {
-                String title = item.title ?? "Title";
+                String title = item.title ?? "Untitled";
                 String link = item.link ?? "";
                 String description = item.description ?? item.content?.value ?? "";
 
-                // AI Summarization
+                await Future.delayed(const Duration(seconds: 2));
+
                 String summary = await _getAiSummary(title, link, description);
                 
-                if (!summary.contains("SKIP") && !summary.contains("HATA")) {
+                if (summary.contains("AI Hatası") || summary == "Empty") {
+                   debugPrint("⚠️ AI Failed for $title, using fallback.");
+                   summary = description.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+                   if (summary.isEmpty) summary = title; 
+                   if (summary.length > 150) summary = "${summary.substring(0, 150)}...";
+                }
+
+                if (!summary.contains("SKIP")) {
                   tempNews.add({
                     "source": _extractDomain(url),
                     "title": title,
@@ -321,21 +306,19 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
 
     final prompt = [
       Content.text("""
-      ROLE: Senior Tech Editor.
-      TASK: Analyze this news for a Computer Engineer.
+      ROLE: Tech Editor.
+      TASK: Summarize for Engineers.
       
       DATA:
       Title: $title
       Snippet: $description
-      Link: $link
 
-      RULES (STRICT):
-      1. FILTER: If news is about shopping, pure gossip, stock markets, or generic how-to guides -> Output 'SKIP'.
-      2. SUMMARIZE: Write ONE concise sentence in **$targetLang**.
-      3. TONE: Technical, direct, engineer-to-engineer. No fluff.
-      4. TERMS: Keep English tech terms (LLM, GPU, Kernel) as is.
+      RULES:
+      1. FILTER: If shopping/gossip/stock -> Output 'SKIP'.
+      2. SUMMARIZE: Write ONE sentence in **$targetLang**.
+      3. TONE: Technical & Direct.
 
-      OUTPUT: Only the summary text.
+      OUTPUT: Only summary.
       """)
     ];
 
@@ -343,7 +326,8 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
       final response = await _model!.generateContent(prompt);
       return response.text?.replaceAll("Özet:", "").trim() ?? "Empty";
     } catch (e) {
-      return t('aiError');
+      debugPrint("❌ Gemini Error: $e");
+      return "AI Hatası";
     }
   }
 
@@ -359,10 +343,9 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
 
   String _determineType(String title) {
     String t = title.toLowerCase();
-    if (t.contains("paper") || t.contains("research") || t.contains("arxiv")) return "science";
-    if (t.contains("code") || t.contains("linux") || t.contains("rust") || t.contains("github")) return "repo";
+    if (t.contains("paper") || t.contains("arxiv")) return "science";
+    if (t.contains("code") || t.contains("linux") || t.contains("github")) return "repo";
     if (t.contains("ai") || t.contains("gpt") || t.contains("llm")) return "ai";
-    if (t.contains("chip") || t.contains("nvidia") || t.contains("cpu")) return "hardware";
     return "article";
   }
 
@@ -373,7 +356,6 @@ class _TechFeedScreenState extends State<TechFeedScreen> {
     }
   }
 
-  // --- Settings Modal UI ---
   void _showSettingsModal() {
     final apiKeyController = TextEditingController(text: _userApiKey);
     final rssController = TextEditingController();

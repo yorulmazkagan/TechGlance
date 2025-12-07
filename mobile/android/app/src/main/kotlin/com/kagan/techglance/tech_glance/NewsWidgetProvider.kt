@@ -23,7 +23,6 @@ class NewsWidgetProvider : HomeWidgetProvider() {
     ) {
         appWidgetIds.forEach { widgetId ->
             val views = RemoteViews(context.packageName, R.layout.widget_layout).apply {
-                // Initialize the service to populate the list view
                 val intent = Intent(context, NewsWidgetService::class.java).apply {
                     putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
                     data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
@@ -31,17 +30,18 @@ class NewsWidgetProvider : HomeWidgetProvider() {
                 setRemoteAdapter(R.id.widget_list_view, intent)
                 setEmptyView(R.id.widget_list_view, R.id.empty_view)
 
-                // Open the app when the header is clicked
                 val pendingIntent = HomeWidgetLaunchIntent.getActivity(context, MainActivity::class.java)
                 setOnClickPendingIntent(R.id.header_container, pendingIntent)
+
+                setOnClickPendingIntent(R.id.refresh_btn, pendingIntent)
             }
             
-            // Notify the widget manager to update the data
             appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list_view)
             appWidgetManager.updateAppWidget(widgetId, views)
         }
     }
 }
+
 
 class NewsWidgetService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory {
@@ -59,8 +59,6 @@ class NewsRemoteViewsFactory(private val context: Context) : RemoteViewsService.
         Log.d("TechGlanceWidget", "Refeshing widget data...")
 
         try {
-            // STRATEGY: Read directly from Flutter's SharedPreferences file.
-            // Flutter adds a "flutter." prefix to all keys.
             val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
             val jsonString = prefs.getString("flutter.cached_news", "[]")
             
@@ -70,11 +68,8 @@ class NewsRemoteViewsFactory(private val context: Context) : RemoteViewsService.
                     newsList.add(jsonArray.getJSONObject(i))
                 }
                 Log.d("TechGlanceWidget", "Loaded ${newsList.size} articles.")
-            } else {
-                Log.d("TechGlanceWidget", "No data found in SharedPreferences.")
             }
         } catch (e: Exception) {
-            Log.e("TechGlanceWidget", "Error reading data: ${e.message}")
             e.printStackTrace()
         }
     }
@@ -94,7 +89,6 @@ class NewsRemoteViewsFactory(private val context: Context) : RemoteViewsService.
             views.setTextViewText(R.id.news_time, item.optString("time"))
             views.setTextViewText(R.id.news_summary, item.optString("summary"))
             
-            // Intent to open the URL (Flutter handles the deep link logic if needed, or browser opens)
             val fillInIntent = Intent().apply {
                 val url = item.optString("link")
                 data = Uri.parse(url)
