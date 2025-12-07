@@ -83,15 +83,7 @@ To build and run this project locally, you need the Flutter SDK and an Android e
     flutter run
     ```
 
----
-
-## 📸 Screenshots
-
-| Home Screen | Settings & Config | Native Widget |
-| :---: | :---: | :---: |
-| *(Add Screenshot)* | *(Add Screenshot)* | *(Add Screenshot)* |
-
----
+--- 
 
 ## 🤖 AI Assistance & Development Process
 
